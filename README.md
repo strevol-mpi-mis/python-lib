@@ -1,5 +1,5 @@
 # python-lib
-Python Library for RNA Evolution
+Python Library for RNA design
 
 
 The objective of the rna-evol project is to propose a python tool for rna design by evolving a population of rna.
