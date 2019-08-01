@@ -1,4 +1,4 @@
-# python-lib
+# rna-evol
 Python Library for RNA design
 
 
