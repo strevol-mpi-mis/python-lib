@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="rna-evol",
-    version="0.0.1",
+    name="rnaevol-lemerleau",
+    version="0.0.3",
     author="Nono Saha Cyrille Merleau",
     author_email="nonosaha@mis.mpg.de",
     description="Evolving a population of rna sequence for an efficient rna design",

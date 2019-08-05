@@ -81,6 +81,7 @@ def ensDiversity_proportion_selection(population: List[Individual], size:int, pa
         pool = mp.Pool(mp.cpu_count())
         args = [(params.landscape.target_structure,ind.rna_sequence) for ind in population]
         ensDiv = pool.starmap(landscape.ens_diversity, args)
+        pool.close()
     else : 
         ensDiv = numpy.array([landscape.ens_diversity(params.landscape.target_structure,ind.rna_sequence) for ind in population])
     
@@ -94,6 +95,7 @@ def ensDefect_proportion_selection(pe:bool, population: List[Individual], size:i
         pool = mp.Pool(mp.cpu_count())
         args = [(params.landscape.target_structure,ind.rna_sequence) for ind in population]
         ensDefect = pool.starmap(landscape.ens_defect, args)
+        pool.close()
     else : 
         ensDefect = [landscape.ens_defect(params.landscape.target_structure,ind.rna_sequence) for ind in population]
     
@@ -106,6 +108,7 @@ def min_ens_distance_proportion_selection(pe:bool, population: List[Individual],
         pool = mp.Pool(mp.cpu_count())
         args = [(params.landscape.target_structure,ind.rna_sequence,5.0) for ind in population]
         ensDist = pool.starmap(landscape.min_ens_distance, args)
+        pool.close()
     else : 
         ensDist = [landscape.min_ens_distance(params.landscape.target_structure,ind.rna_sequence, 5.0) for ind in population]
     
@@ -307,11 +310,11 @@ def ea_with_crossover(self,number_of_generation, mut_probs, log_folder, mut_bp) 
     return prev_population
 
 """
-def inverse(params:Parameter) -> List[Individual] : 
+def inverse(params:Parameter, pe) -> List[Individual] : 
     initializer = Initializer(params.population_size,params.landscape) 
     init_pop = initializer.init_with_const(params.nucleotides, params.base_paires)
 
-    max_gen,best_population = ea_without_crossover(init_pop, params)
+    max_gen,best_population = ea_without_crossover(init_pop, params, pe)
     if max_gen < params.generation : 
         print("Solution found after ",max_gen, "generations : ")
         best_solutions = []
