@@ -11,6 +11,7 @@ import RNA
 import pandas
 import os
 import subprocess
+import multiprocess as mp
 
 from dataclasses import dataclass
 from typing import List
@@ -76,18 +77,38 @@ def fitness_proportion_selection(population : List[Individual], size:int) -> Lis
 
 def ensDiversity_proportion_selection(population: List[Individual], size:int, params: Parameter)-> List[Individual]: 
     
-    ensDiv = numpy.array([landscape.ens_diversity(params.landscape.target_structure,ind.rna_sequence) for ind in population])
+    if pe : 
+        pool = mp.Pool(mp.cpu_count())
+        args = [(params.landscape.target_structure,ind.rna_sequence) for ind in population]
+        ensDiv = pool.starmap(landscape.ens_diversity, args)
+    else : 
+        ensDiv = numpy.array([landscape.ens_diversity(params.landscape.target_structure,ind.rna_sequence) for ind in population])
+    
     selected = numpy.random.choice(population,size=size,p=numpy.array(ensDiv)/sum(ensDiv))
     return selected
 
 
-def ensDefect_proportion_selection(population: List[Individual], size:int, params: Parameter) : 
-    ensDefect = [landscape.ens_defect(params.landscape.target_structure,ind.rna_sequence) for ind in population]
+def ensDefect_proportion_selection(pe:bool, population: List[Individual], size:int, params: Parameter) : 
+    
+    if pe : 
+        pool = mp.Pool(mp.cpu_count())
+        args = [(params.landscape.target_structure,ind.rna_sequence) for ind in population]
+        ensDefect = pool.starmap(landscape.ens_defect, args)
+    else : 
+        ensDefect = [landscape.ens_defect(params.landscape.target_structure,ind.rna_sequence) for ind in population]
+    
     selected = numpy.random.choice(population,size=size,p=numpy.array(ensDefect)/sum(ensDefect))
     return selected
 
-def min_ens_distance_proportion_selection(population: List[Individual], size:int, params: Parameter)->List[Individual] : 
-    ensDist = [landscape.min_ens_distance(params.landscape.target_structure,ind.rna_sequence, 5.0) for ind in population]
+def min_ens_distance_proportion_selection(pe:bool, population: List[Individual], size:int, params: Parameter)->List[Individual] : 
+    
+    if pe : 
+        pool = mp.Pool(mp.cpu_count())
+        args = [(params.landscape.target_structure,ind.rna_sequence,5.0) for ind in population]
+        ensDist = pool.starmap(landscape.min_ens_distance, args)
+    else : 
+        ensDist = [landscape.min_ens_distance(params.landscape.target_structure,ind.rna_sequence, 5.0) for ind in population]
+    
     selected = numpy.random.choice(population,size=size,p=numpy.array(ensDist)/sum(ensDist))
     return selected
 
@@ -185,7 +206,7 @@ This function is implementing the simple genetic algorithm
                 The function returns a list of individual of the new generation.
 '''
 
-def ea_without_crossover(init_pop: List[Individual], params:Parameter ) -> List[Individual]: 
+def ea_without_crossover(init_pop: List[Individual], params:Parameter, pe=False) -> List[Individual]: 
 
     print (" Start of evolution ")
     
@@ -207,11 +228,11 @@ def ea_without_crossover(init_pop: List[Individual], params:Parameter ) -> List[
         if params.select_meth == "F" : 
             selected_ind =fitness_proportion_selection(prev_population,population_size,params)
         elif  params.select_meth == "ED":
-            selected_ind = ensDefect_proportion_selection(prev_population,population_size,params)
+            selected_ind = ensDefect_proportion_selection(pe,prev_population,population_size,params)
         elif params.select_meth == "MED"  : 
-            selected_ind = min_ens_distance_proportion_selection(prev_population, population_size,params)
+            selected_ind = min_ens_distance_proportion_selection(pe,prev_population, population_size,params)
         elif params.select_meth == "EDV"  : 
-            selected_ind = ensDiversity_proportion_selection(prev_population, population_size,params)
+            selected_ind = ensDiversity_proportion_selection(pe,prev_population, population_size,params)
         
         mutated = mutateAll(selected_ind,params)
 
