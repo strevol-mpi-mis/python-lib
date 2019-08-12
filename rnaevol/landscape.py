@@ -25,6 +25,7 @@ class Landscape(object) :
 
         type_ : str 
         target_structure : str
+        min_energy : float = 5.0
 
 
         
@@ -48,7 +49,7 @@ def tree_edit_fitness(rna_structure1:str, rna_structure2:str) -> float :
         return 1./(1.+RNA.tree_edit_distance(RNA.make_tree(ref_xstrc), RNA.make_tree(xstrc)))
 
 
-def min_ens_distance(target_structure:str, rna_sequence:str, min_energy=3.5) -> float : 
+def min_ens_distance(target_structure:str, rna_sequence:str, min_energy=5.0) -> float : 
 
         rnasubopt = subprocess.Popen(args=['RNAsubopt', '-e', str(min_energy)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         rnasubopt_out, rnasubopt_err = rnasubopt.communicate(rna_sequence.encode()) 

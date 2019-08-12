@@ -39,7 +39,6 @@ class Initializer(object) :
         i = 0
         while i < self.population_size : 
             if i < 4 : 
-                print(self.landscape.target_structure,nucleotides)
                 arn = numpy.random.choice(nucleotides[i:i+1],len(self.landscape.target_structure))
             else : 
                 arn = numpy.random.choice(nucleotides,len(self.landscape.target_structure))

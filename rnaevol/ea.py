@@ -35,6 +35,10 @@ class Parameter(object) :
     p_n:List[float]
     p_c:List[float]
     generation: int
+    log_folder: str = "rnaevol_logs"
+
+    def set_log_folder(self, new_log_folder:str) : 
+        self.log_folder = new_log_folder
     
 
 #Mutation function 
@@ -59,13 +63,17 @@ def mutateOne(ind:Individual, params:Parameter) -> Individual :
             RNA_seq[bp_cord[1]] = bp[0][1] 
     
 
-    (RNA_strc, mef) = RNA.fold(''.join(RNA_seq))
-    return Individual(''.join(RNA_seq), RNA_strc, mef,params.landscape.eval_fitness(RNA_strc))
+    (RNA_strc, mfe) = RNA.fold(''.join(RNA_seq))
+    return Individual(''.join(RNA_seq), RNA_strc, mfe,params.landscape.eval_fitness(RNA_strc))
 
-
-
-def mutateAll(population: List[Individual], params:Parameter) -> List[Individual]: 
-    mutated_pop = [mutateOne(ind,params) for ind in population] 
+def mutateAll(population: List[Individual], params:Parameter, pm=True) -> List[Individual]: 
+    if pm : 
+        pool = mp.Pool(mp.cpu_count())
+        args = [(ind, params) for ind in population]
+        mutated_pop = pool.starmap(mutateOne,args)
+        pool.close()
+    else: 
+        mutated_pop = [mutateOne(ind,params) for ind in population] 
     return mutated_pop
 
 
@@ -75,7 +83,7 @@ def fitness_proportion_selection(population : List[Individual], size:int) -> Lis
     selected = numpy.random.choice(population,size=size,p=fitnesses/numpy.sum(fitnesses))
     return selected
 
-def ensDiversity_proportion_selection(population: List[Individual], size:int, params: Parameter)-> List[Individual]: 
+def ensDiversity_proportion_selection(pe:bool,population: List[Individual], size:int, params: Parameter)-> List[Individual]: 
     
     if pe : 
         pool = mp.Pool(mp.cpu_count())
@@ -106,7 +114,7 @@ def min_ens_distance_proportion_selection(pe:bool, population: List[Individual],
     
     if pe : 
         pool = mp.Pool(mp.cpu_count())
-        args = [(params.landscape.target_structure,ind.rna_sequence,5.0) for ind in population]
+        args = [(params.landscape.target_structure,ind.rna_sequence,params.landscape.min_energy) for ind in population]
         ensDist = pool.starmap(landscape.min_ens_distance, args)
         pool.close()
     else : 
@@ -209,22 +217,27 @@ This function is implementing the simple genetic algorithm
                 The function returns a list of individual of the new generation.
 '''
 
-def ea_without_crossover(init_pop: List[Individual], params:Parameter, pe=False) -> List[Individual]: 
-
-    print (" Start of evolution ")
+def ea_without_crossover(init_pop: List[Individual], params:Parameter,bt_log:bool, pe=True, sender=None) -> List[Individual]: 
+    
+    logger = Logger(str(params.log_folder),str(params.select_meth))
+    
     
     prev_population = numpy.copy(init_pop) #Initialize the population of RNA
     population_size = len(init_pop)
     n = params.generation
     
-    #logger = Logger(str(log_folder),str(self.select_meth))
-    #logger.save_population(prev_population,0)
+    if bt_log : 
+        logger.bt_save_population(prev_population,prev_population,0)
+    else : 
+        logger.save_population(prev_population,0)
     max_fitness = max([ind.fitness for ind in prev_population])
     newgeneration = numpy.copy(prev_population)
+
+    logger.info("Start of evolution ")
     while (n > 0) and (max_fitness < 1):
     
         if (params.generation - n)%10 == 0 : 
-            print ('Generation '+str(params.generation - n), "Max fitness = ", max_fitness)
+            logger.info('Generation '+str(params.generation - n) + " Max fitness = " +str(max_fitness))
         newgeneration = []
         newgeneration =  reproduce(prev_population,int(0.1*population_size))
         
@@ -236,24 +249,29 @@ def ea_without_crossover(init_pop: List[Individual], params:Parameter, pe=False)
             selected_ind = min_ens_distance_proportion_selection(pe,prev_population, population_size,params)
         elif params.select_meth == "EDV"  : 
             selected_ind = ensDiversity_proportion_selection(pe,prev_population, population_size,params)
-        
+         
         mutated = mutateAll(selected_ind,params)
 
         
         newgeneration = numpy.insert(newgeneration, len(newgeneration),mutated)
         prev_population = numpy.copy(newgeneration)
-        #logger.save_population(prev_population,number_of_generation-n)
+        
+        if bt_log : 
+            logger.bt_save_population(selected_ind,mutated,params.generation-n)
+        else : 
+            logger.save_population(prev_population,params.generation-n)
         
         new_max = max([ind.fitness for ind in prev_population])
         if new_max > max_fitness : 
             max_fitness = new_max
         n -=1
-
+    logger.info('Generation '+str(params.generation - n) + " Max fitness = " +str(max_fitness))
+    logger.info("End of evolution after "+str(params.generation - n) + " generations")
+    if sender != None : 
+        sender.send((params.generation - n, prev_population))
     return params.generation - n, prev_population
 
 
-
-    
 '''
 This function is implementing the simple genetic algorithm
         INPUT
@@ -310,11 +328,13 @@ def ea_with_crossover(self,number_of_generation, mut_probs, log_folder, mut_bp) 
     return prev_population
 
 """
-def inverse(params:Parameter, pe) -> List[Individual] : 
+
+
+def inverse(params:Parameter, bt_log:bool, pe:bool) -> List[Individual] : 
     initializer = Initializer(params.population_size,params.landscape) 
     init_pop = initializer.init_with_const(params.nucleotides, params.base_paires)
 
-    max_gen,best_population = ea_without_crossover(init_pop, params, pe)
+    max_gen,best_population = ea_without_crossover(init_pop, params, bt_log, pe)
     if max_gen < params.generation : 
         print("Solution found after ",max_gen, "generations : ")
         best_solutions = []
@@ -329,10 +349,34 @@ def inverse(params:Parameter, pe) -> List[Individual] :
         print("Solution not found after ",max_gen, "generations  ")
         return None
 
-def run(self, number_of_generation,mut_probs, mut_bp, nbjobs, log_fold) : 
+def run(params:List[Parameter],bt_log:bool, pe:bool) -> pandas.DataFrame: 
     
+    njobs = len(params)
+    results = []
+    jobs = []
+    receivers = []
+    for i in range(njobs) : 
+        initializer = Initializer(params[i].population_size,params[i].landscape) 
+        init_pop = initializer.init_with_const(params[i].nucleotides, params[i].base_paires)
+        receiver, sender = mp.Pipe(False)
+        p = mp.Process(target=ea_without_crossover, args=(init_pop, params[i], bt_log, pe,sender,))
+        jobs.append(p)
+        receivers.append(receiver)
+    
+    for i  in range(njobs) : 
+        jobs[i].start()
+        results.append(receivers[i].recv())
+        jobs[i].join()
+    
+    
+    best_solutions = []
+    for rst in results : 
+        for ind in rst[1]: 
+            if ind.fitness == 1.0 : 
+                best_solutions.append([ind.rna_sequence, ind.fitness, ind.mfe,1/landscape.ens_defect(params.landscape.target_structure,ind.rna_sequence)])
+    df = pandas.DataFrame(best_solutions, columns=["Sequence", "Fitness","MFE","ED"])
 
-    return None
+    return df
 
 
 
